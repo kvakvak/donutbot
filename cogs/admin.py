@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from typing import Optional
 
 
 class Admin(commands.Cog):
@@ -32,30 +31,39 @@ class Admin(commands.Cog):
         ]
 
     @commands.group(invoke_without_command=True)
-    async def sync(
-        self, ctx: commands.Context, guild_id: Optional[int], copy: bool = False
-    ) -> None:
+    async def sync(self, ctx: commands.Context) -> None:
+        """Sync global slash commands (use !sync guild for instant guild-only sync)."""
         if ctx.author.id not in self.bot.admins:
-            return
-        if guild_id:
-            guild = discord.Object(id=guild_id)
-        else:
-            guild = ctx.guild
+            return await ctx.send("❌ You don't have permission to do that.")
+        synced = await self.bot.tree.sync()
+        names = ", ".join(f"/{c.name}" for c in synced) or "none"
+        await ctx.send(
+            f"✅ Successfully synced **{len(synced)}** global command(s): {names}"
+        )
 
-        if copy:
-            self.bot.tree.copy_global_to(guild=guild)
-
-        synced = await self.bot.tree.sync(guild=guild)
-        for command in synced:
-            print("[Command] {0:12} [ID] {1}".format(command.name, command.id))
-        await ctx.send(f"Successfully synced {len(synced)} commands")
+    @sync.command(name="guild")
+    async def sync_guild(self, ctx: commands.Context) -> None:
+        """Instant guild sync (copies global commands into this server)."""
+        if ctx.author.id not in self.bot.admins:
+            return await ctx.send("❌ You don't have permission to do that.")
+        if ctx.guild is None:
+            return await ctx.send("❌ Run this in a server, not DMs.")
+        self.bot.tree.copy_global_to(guild=ctx.guild)
+        synced = await self.bot.tree.sync(guild=ctx.guild)
+        names = ", ".join(f"/{c.name}" for c in synced) or "none"
+        await ctx.send(
+            f"✅ Guild sync: **{len(synced)}** command(s) in this server: {names}"
+        )
 
     @sync.command(name="global")
     async def sync_global(self, ctx: commands.Context):
         if ctx.author.id not in self.bot.admins:
-            return
-        synced = await self.bot.tree.sync(guild=None)
-        await ctx.send(f"Successfully synced {len(synced)} commands")
+            return await ctx.send("❌ You don't have permission to do that.")
+        synced = await self.bot.tree.sync()
+        names = ", ".join(f"/{c.name}" for c in synced) or "none"
+        await ctx.send(
+            f"✅ Successfully synced **{len(synced)}** global command(s): {names}"
+        )
 
     @sync.command(name="duplicate")
     async def sync_clear_duplicates(self, ctx: commands.Context):
