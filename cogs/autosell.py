@@ -3,9 +3,9 @@ from discord import app_commands
 from discord.ext import commands
 
 import config
-from orders_store import get_order, upsert_order
+from order_flow import notify_payment_confirmed
+from orders_store import get_order
 from views.autosell import (
-    PrivacyView,
     SellMoneyButton,
     build_panel_embed,
     format_millions,
@@ -62,37 +62,14 @@ class Autosell(commands.Cog):
                 f"ℹ️ Order #{order_id} is already completed.", ephemeral=True
             )
 
-        order["status"] = "paid"
-        upsert_order(order_id, order)
-
-        user = self.bot.get_user(order["discord_id"])
-        if user is None:
-            try:
-                user = await self.bot.fetch_user(order["discord_id"])
-            except discord.HTTPException:
-                user = None
-
-        if user is not None:
-            ltc_line = (
-                f"**{order['ltc_amount']:.8f} LTC**"
-                if order.get("ltc_amount")
-                else f"**~${order['usd']:.2f} in LTC**"
+        ok = await notify_payment_confirmed(self.bot, order_id)
+        if not ok:
+            return await interaction.response.send_message(
+                f"⚠️ Order #{order_id} marked paid, but I couldn't DM the user.",
+                ephemeral=True,
             )
-            try:
-                await user.send(
-                    content=(
-                        f"✅ **Payment confirmed for Order #{order_id}!**\n"
-                        f"Payout of {ltc_line} is being sent to:\n`{order['ltc']}`\n\n"
-                        "Do you want this sale shown as **Public** or **Anonymous**?"
-                    ),
-                    view=PrivacyView(order_id=order_id),
-                )
-            except discord.HTTPException:
-                return await interaction.response.send_message(
-                    f"⚠️ Order #{order_id} confirmed, but I couldn't DM the user.",
-                    ephemeral=True,
-                )
 
+        order = get_order(order_id) or order
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="✅ Order Confirmed",

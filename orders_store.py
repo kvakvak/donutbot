@@ -40,3 +40,37 @@ def upsert_order(order_id: int, payload: dict[str, Any]) -> None:
 def get_order(order_id: int) -> dict[str, Any] | None:
     data = load_orders()
     return data.get("orders", {}).get(str(order_id))
+
+
+def get_orders_by_status(status: str) -> list[tuple[int, dict[str, Any]]]:
+    data = load_orders()
+    matches: list[tuple[int, dict[str, Any]]] = []
+    for key, order in data.get("orders", {}).items():
+        if order.get("status") == status:
+            matches.append((int(key), order))
+    return matches
+
+
+def find_awaiting_order_by_exact_pay(amount: int) -> tuple[int, dict[str, Any]] | None:
+    for order_id, order in get_orders_by_status("awaiting_payment"):
+        if int(order.get("exact_pay", 0)) == amount:
+            return order_id, order
+    return None
+
+
+def allocate_pay_suffix() -> int | None:
+    """Return a free 2-digit code (00-99) for a pending payment."""
+    used = {
+        int(order["pay_suffix"])
+        for _, order in get_orders_by_status("awaiting_payment")
+        if order.get("pay_suffix") is not None
+    }
+    for suffix in range(100):
+        if suffix not in used:
+            return suffix
+    return None
+
+
+def build_exact_pay(base_money: int, pay_suffix: int) -> int:
+    """Round amount to base and append unique last 2 digits (00-99)."""
+    return (base_money // 100) * 100 + pay_suffix

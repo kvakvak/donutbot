@@ -3,7 +3,13 @@ import discord
 from discord import ui
 
 import config
-from orders_store import get_order, next_order_id, upsert_order
+from orders_store import (
+    allocate_pay_suffix,
+    build_exact_pay,
+    get_order,
+    next_order_id,
+    upsert_order,
+)
 
 
 async def fetch_ltc_usd() -> float | None:
@@ -176,9 +182,16 @@ class AmountModal(ui.Modal, title="How much do you want to sell?"):
 
         await interaction.response.defer(ephemeral=True)
 
+        pay_suffix = allocate_pay_suffix()
+        if pay_suffix is None:
+            return await interaction.followup.send(
+                "❌ All payment codes are in use right now. Please try again in a few minutes.",
+                ephemeral=True,
+            )
+
         order_id = next_order_id()
         base_money = int(round(amount_m * 1_000_000))
-        exact_pay = base_money + order_id
+        exact_pay = build_exact_pay(base_money, pay_suffix)
         usd = payout_usd(amount_m)
 
         ltc_price = await fetch_ltc_usd()
@@ -200,6 +213,8 @@ class AmountModal(ui.Modal, title="How much do you want to sell?"):
                 "ign": self.ign,
                 "ltc": self.ltc,
                 "amount_m": amount_m,
+                "base_money": (base_money // 100) * 100,
+                "pay_suffix": pay_suffix,
                 "exact_pay": exact_pay,
                 "usd": usd,
                 "ltc_amount": ltc_amount,
